@@ -1,4 +1,4 @@
-# TimeShift
+# Timezone-Convert
 
 This unpacked Chrome extension converts time expressions in a floating panel.
 
