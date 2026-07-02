@@ -9,10 +9,10 @@ chrome.action.onClicked.addListener(async (tab) => {
   });
 });
 
-const LOCAL_OPENAI_PROXY = 'http://127.0.0.1:8787/parse-time';
+const TIMESHIFT_API = 'https://timeshift-api.onrender.com/parse-time';
 
 async function parseTimeWithAI(payload) {
-  const response = await fetch(LOCAL_OPENAI_PROXY, {
+  const response = await fetch(TIMESHIFT_API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -20,7 +20,7 @@ async function parseTimeWithAI(payload) {
 
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(body.error || `Local OpenAI proxy returned ${response.status}`);
+    throw new Error(body.error || `TimeShift API returned ${response.status}`);
   }
   return body;
 }

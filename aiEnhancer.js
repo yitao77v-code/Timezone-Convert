@@ -179,13 +179,13 @@
       });
     }
 
-    return fetch('http://127.0.0.1:8787/parse-time', {
+    return fetch('https://timeshift-api.onrender.com/parse-time', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).then(async (response) => {
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) return { ok: false, error: body.error || `Local proxy returned ${response.status}` };
+      if (!response.ok) return { ok: false, error: body.error || `TimeShift API returned ${response.status}` };
       return { ok: true, result: body };
     });
   }

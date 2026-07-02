@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parseDeterministicTime } from './timeParser.mjs';
 
-const PORT = Number(process.env.TIMESHIFT_PROXY_PORT || 8787);
+const PORT = Number(process.env.PORT || process.env.TIMESHIFT_PROXY_PORT || 8787);
 const ENV_PATH = resolve(process.cwd(), '.env.local');
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4.1-nano';
 
@@ -208,6 +208,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`TimeShift OpenAI proxy listening on http://127.0.0.1:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`TimeShift API listening on port ${PORT}`);
 });
