@@ -1,13 +1,17 @@
 {
   "name": "timeshift-extension",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "build": "node scripts/build.mjs"
   },
   "dependencies": {
     "chrono-node": "^2.9.1",
     "luxon": "^3.7.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
   }
 }

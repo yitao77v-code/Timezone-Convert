@@ -34,7 +34,11 @@ export function parseDeterministicTime(payload) {
   const outputLocale = detectOutputLocale(text);
 
   if (!text) return { source: 'deterministic', candidates: [], message: 'No input.' };
-  if (!isValidZone(targetTimeZone)) return null;
+  if (!isValidZone(targetTimeZone) || !Number.isFinite(now.getTime())) return null;
+  if (/\b(?:UTC|GMT)\s*[+-]\s*(\d{1,2})(?::?(\d{2}))?\b/gi.test(text)) {
+    const offsets = [...text.matchAll(/\b(?:UTC|GMT)\s*[+-]\s*(\d{1,2})(?::?(\d{2}))?\b/gi)];
+    if (offsets.some(([, hours, minutes]) => Number(hours) > 14 || Number(minutes || 0) >= 60 || (Number(hours) === 14 && Number(minutes || 0) > 0))) return null;
+  }
   // Chrono can split this relation into unrelated dates instead of resolving it.
   if (/\b(?:first|second|third|fourth|fifth|last)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(?:in|of)\b/i.test(text)) return null;
 
@@ -49,7 +53,11 @@ export function parseDeterministicTime(payload) {
   if (isoResult) return isoResult;
 
   const chronoLocale = selectChronoLocale(locale, text);
-  const parsed = chronoLocale.parse(text, now, { forwardDate: true }).slice(0, 5);
+  // Relative dates belong to the source timezone, not the computer's timezone.
+  const referenceZone = sourceZones[0]?.zone || targetTimeZone;
+  const reference = { instant: now, timezone: DateTime.fromJSDate(now, { zone: referenceZone }).offset };
+  const parsed = chronoLocale.parse(text, reference, { forwardDate: true });
+  if (parsed.length > 5) return null;
   if (!parsed.length) return null;
 
   const sourceZone = sourceZones[0] ?? inferDateOnlyZone(parsed, targetTimeZone);
@@ -59,7 +67,7 @@ export function parseDeterministicTime(payload) {
     .map((item) => toCandidate(item, text, sourceZone, targetTimeZone, outputLocale))
     .filter(Boolean);
 
-  if (!candidates.length) return null;
+  if (!candidates.length || candidates.length !== parsed.length) return null;
 
   return {
     source: 'deterministic',
@@ -107,12 +115,13 @@ function toCandidate(item, originalText, sourceZone, targetTimeZone, outputLocal
   if (!year || !month || !day) return null;
 
   const sourceDate = DateTime.fromObject({ year, month, day, hour, minute, second }, { zone: sourceZone.zone });
-  if (!sourceDate.isValid) return null;
+  if (!isUnambiguousWallTime(sourceDate, { year, month, day, hour, minute, second })) return null;
 
   const targetDate = sourceDate.setZone(targetTimeZone);
   if (!targetDate.isValid) return null;
 
   const endSourceDate = item.end ? toDateTime(item.end, sourceZone.zone) : null;
+  if (item.end && !endSourceDate) return null;
   const endTargetDate = endSourceDate ? endSourceDate.setZone(targetTimeZone) : null;
 
   return {
@@ -137,15 +146,25 @@ function toDateTime(component, zone) {
   const day = component.get('day');
   if (!year || !month || !day) return null;
 
-  const dateTime = DateTime.fromObject({
+  const wallTime = {
     year,
     month,
     day,
     hour: component.get('hour') ?? 0,
     minute: component.get('minute') ?? 0,
     second: component.get('second') ?? 0
-  }, { zone });
-  return dateTime.isValid ? dateTime : null;
+  };
+  const dateTime = DateTime.fromObject(wallTime, { zone });
+  return isUnambiguousWallTime(dateTime, wallTime) ? dateTime : null;
+}
+
+function isUnambiguousWallTime(dateTime, expected) {
+  if (!dateTime.isValid) return false;
+  // Luxon normalizes nonexistent spring-forward times; reject that silent shift.
+  if (Object.entries(expected).some(([key, value]) => dateTime[key] !== value)) return false;
+  // A fall-back wall time can refer to two instants. Require an explicit offset.
+  return dateTime.getPossibleOffsets().length === 1;
+
 }
 
 function detectSourceZones(text) {
@@ -202,7 +221,7 @@ function isValidZone(zone) {
 }
 
 function selectChronoLocale(locale, text) {
-  if (/[\u3400-\u9fff]/.test(text) && !/[A-Za-z]/.test(text) && chrono.zh?.hans) return chrono.zh.hans;
+  if (/[\u3400-\u9fff]/.test(text) && (!/[A-Za-z]/.test(text) || /明天|今天|后天|昨天|\d+[年月日点时分]|上午|下午|晚上/.test(text)) && chrono.zh?.hans) return chrono.zh.hans;
   if (/^ja/i.test(locale) && chrono.ja) return chrono.ja;
   if (/^fr/i.test(locale) && chrono.fr) return chrono.fr;
   if (/^de/i.test(locale) && chrono.de) return chrono.de;
@@ -242,7 +261,10 @@ function formatOffset(dateTime) {
 function buildNotices(item, sourceZone) {
   const notices = [];
   if (item.start.isCertain && !item.start.isCertain('day')) {
-    notices.push('Date was inferred from the provided reference time.');
+    notices.push('Date was inferred from the current date in the source timezone. Please confirm.');
+  }
+  if (/\bIST\b/i.test(sourceZone.label || '')) {
+    notices.push('IST is ambiguous; interpreted as India Time (UTC+05:30). Please confirm the source timezone.');
   }
   if (/\bCST\b/i.test(sourceZone.label || '')) {
     notices.push('CST is ambiguous; interpreted as Central Standard Time (UTC-06:00), not China Standard Time.');

@@ -104,7 +104,7 @@ body {
   text-underline-offset: 3px;
 }
 
-/* The legacy bundle still parses locally; only the reviewed backend result is shown. */
+/* The legacy bundle still parses locally; only the current offline result is shown. */
 .results-section,
 .meta-section,
 .timeshift-ai-section[hidden] {

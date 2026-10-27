@@ -1,6 +1,5 @@
 (function () {
   const targetTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  const REQUEST_TIMEOUT_MS = 60000;
   let requestVersion = 0;
   let pending = null;
   let input;
@@ -57,7 +56,7 @@
 
   function criticalNotices(candidate, result) {
     const notices = Array.isArray(candidate.notices) ? candidate.notices : [];
-    const critical = notices.filter(isCriticalNotice);
+    const critical = [...notices];
 
     if (typeof candidate.confidence === 'number' && candidate.confidence > 0 && candidate.confidence < 0.7) {
       critical.push('Low confidence result. Please confirm the source time and timezone.');
@@ -72,9 +71,6 @@
     return [...new Set(critical)].slice(0, 2);
   }
 
-  function isCriticalNotice(notice) {
-    return /missing|ambiguous|uncertain|low confidence|confirm|failed|error|invalid|cannot|unable|timezone.*missing|source timezone|multiple possible/i.test(notice);
-  }
 
   function syncButton() {
     convertButton.disabled = Boolean(pending) || !input.value.trim();
@@ -85,10 +81,8 @@
   function invalidateRequest() {
     requestVersion += 1;
     if (pending) {
-      const previous = pending;
       pending = null;
-      clearTimeout(previous.timeout);
-      previous.controller.abort('input-changed');
+
     }
     renderEmptyOutput();
     syncButton();
@@ -98,12 +92,7 @@
     const text = input.value.trim();
     if (!text || pending) return;
     const version = ++requestVersion;
-    const controller = new AbortController();
-    const request = {
-      id: `${Date.now()}-${version}`,
-      controller,
-      timeout: setTimeout(() => controller.abort('timeout'), REQUEST_TIMEOUT_MS)
-    };
+    const request = {};
     pending = request;
     renderEmptyOutput();
     syncButton();
@@ -115,18 +104,14 @@
         targetTimeZone,
         locale: navigator.language,
         now: new Date().toISOString()
-      }, request.id, controller.signal);
+      });
       if (version !== requestVersion || input.value.trim() !== text) return;
       if (!response?.ok) throw new Error(response?.error || 'Conversion failed. Please try again.');
       renderResult(response.result);
     } catch (error) {
       if (version !== requestVersion || input.value.trim() !== text) return;
-      const message = controller.signal.aborted && controller.signal.reason === 'timeout'
-        ? 'The service took too long. Please try Convert again.'
-        : error.message;
-      renderState('error', message);
+      renderState('error', error.message || 'This time expression could not be converted. Add an explicit date and source timezone.');
     } finally {
-      clearTimeout(request.timeout);
       if (pending === request) {
         pending = null;
         syncButton();
@@ -134,46 +119,11 @@
     }
   }
 
-  function requestParse(payload, requestId, signal) {
-    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-      return new Promise((resolve, reject) => {
-        let settled = false;
-        const finish = (value, error) => {
-          if (settled) return;
-          settled = true;
-          signal.removeEventListener('abort', cancel);
-          if (error) reject(error);
-          else resolve(value);
-        };
-        const cancel = () => {
-          chrome.runtime.sendMessage({ action: 'cancelTimeParse', requestId }, () => {
-            // Reading lastError prevents an unchecked error if the worker has stopped.
-            void chrome.runtime.lastError;
-          });
-          finish(null, new Error('Conversion cancelled.'));
-        };
-        signal.addEventListener('abort', cancel, { once: true });
-        if (signal.aborted) {
-          cancel();
-          return;
-        }
-        chrome.runtime.sendMessage({ action: 'parseTimeWithAI', requestId, payload }, (response) => {
-          const error = chrome.runtime.lastError;
-          finish(response, error ? new Error(error.message) : null);
-        });
-      });
+  function requestParse(payload) {
+    if (typeof globalThis.TimeShiftOffline?.parseLocalTime !== 'function') {
+      throw new Error('The local time parser could not load. Reopen the panel and try again.');
     }
-
-    return fetch('https://timeshift-api.onrender.com/parse-time', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal
-    }).then(async (response) => {
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) return { ok: false, error: body.error || `TimeShift API returned ${response.status}` };
-      return { ok: true, result: body };
-    });
+    return { ok: true, result: TimeShiftOffline.parseLocalTime(payload) };
   }
 
   function bind() {
@@ -191,7 +141,7 @@
     const disclosure = document.createElement('p');
     disclosure.id = 'timeshift-data-disclosure';
     disclosure.className = 'timeshift-data-disclosure';
-    disclosure.textContent = 'Convert sends the full input, target timezone, browser language and current time to TimeShift’s backend on Render. Ambiguous text may be processed by OpenAI. Text is only sent when you choose Convert.';
+    disclosure.textContent = 'Converted entirely on your device. Your text stays here — no AI, account or internet connection required. Include the source timezone for a reliable result.';
 
     const actions = document.createElement('div');
     actions.className = 'timeshift-convert-actions';
