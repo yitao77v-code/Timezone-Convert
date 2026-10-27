@@ -1,15 +1,21 @@
-# Timezone-Convert
+# TimeShift
 
-This unpacked Chrome extension converts time expressions in a floating panel.
+A Chrome Manifest V3 extension that converts time expressions in a floating panel. Click the toolbar icon, enter text, and choose Convert. Text is sent only after that click; the interface describes the data and providers before sending.
 
-## OpenAI recognition
+## Backend
 
-The extension does not embed `OPENAI_API_KEY` in browser-readable files. Start the local proxy before using AI recognition:
+The deployed service is https://timeshift-api.onrender.com. Set OPENAI_API_KEY in the server environment, install the locked dependencies with pnpm install --frozen-lockfile, then run node openai-proxy.mjs. The service listens on PORT (default 8787).
 
-```bash
-/Users/taoyi/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node openai-proxy.mjs
-```
+Common expressions are parsed on the server with chrono-node and converted with Luxon. Ambiguous or unsupported expressions use OpenAI's Responses API. The default is gpt-5.6-luna with reasoning disabled and response storage disabled. Explicitly configured retired gpt-4.1-nano aliases are migrated to gpt-5.6-luna. Other OPENAI_MODEL values are preserved. See https://developers.openai.com/api/docs/deprecations for the retirement and recommended replacement.
 
-The proxy reads `OPENAI_API_KEY` from `.env.local` and listens on `http://127.0.0.1:8787`. Common timezone expressions are parsed locally with `chrono-node` and converted with `Luxon`; OpenAI is used as the fallback for ambiguous or complex text. The fallback model defaults to `gpt-4.1-nano` for lower latency. Override it with `OPENAI_MODEL` if needed.
+Never put API keys in the extension package. The backend does not persist request text in application storage; service-provider retention is described in PRIVACY.md.
 
-If the panel shows a quota or billing error, update billing/quota for the selected OpenAI Platform project and retry.
+## Verification
+
+Run node --test. Coverage includes timezone offsets, daylight saving boundaries, ambiguous inputs, explicit-send privacy behavior, cancellation, stale responses, and timeouts.
+
+## Chrome Web Store package
+
+Run python3 scripts/package.py. Only runtime extension files and the embedded privacy page are packaged. Server code, dependencies, tests, git metadata, and environment files are excluded.
+
+The embedded privacy page is privacy.html. The public policy is https://github.com/yitao77v-code/Timezone-Convert/blob/main/PRIVACY.md.

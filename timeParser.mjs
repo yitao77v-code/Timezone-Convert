@@ -2,10 +2,19 @@ import * as chrono from 'chrono-node';
 import { DateTime, FixedOffsetZone, IANAZone } from 'luxon';
 
 const ZONE_ALIASES = [
-  [/pacific(?:\s+(?:standard|daylight))?\s+time|\bP[DS]T\b|\bPT\b/i, 'America/Los_Angeles', 'Pacific Time'],
-  [/eastern(?:\s+(?:standard|daylight))?\s+time|\bE[DS]T\b|\bET\b/i, 'America/New_York', 'Eastern Time'],
-  [/central(?:\s+(?:standard|daylight))?\s+time|\bC[DS]T\b|\bCT\b/i, 'America/Chicago', 'Central Time'],
-  [/mountain(?:\s+(?:standard|daylight))?\s+time|\bM[DS]T\b|\bMT\b/i, 'America/Denver', 'Mountain Time'],
+  // Explicit standard/daylight names denote fixed offsets, regardless of the date.
+  [/pacific\s+standard\s+time|\bPST\b/i, 'UTC-8'],
+  [/pacific\s+daylight\s+time|\bPDT\b/i, 'UTC-7'],
+  [/eastern\s+standard\s+time|\bEST\b/i, 'UTC-5'],
+  [/eastern\s+daylight\s+time|\bEDT\b/i, 'UTC-4'],
+  [/central\s+standard\s+time|\bCST\b/i, 'UTC-6'],
+  [/central\s+daylight\s+time|\bCDT\b/i, 'UTC-5'],
+  [/mountain\s+standard\s+time|\bMST\b/i, 'UTC-7'],
+  [/mountain\s+daylight\s+time|\bMDT\b/i, 'UTC-6'],
+  [/pacific\s+time|\bPT\b/i, 'America/Los_Angeles', 'Pacific Time'],
+  [/eastern\s+time|\bET\b/i, 'America/New_York', 'Eastern Time'],
+  [/central\s+time|\bCT\b/i, 'America/Chicago', 'Central Time'],
+  [/mountain\s+time|\bMT\b/i, 'America/Denver', 'Mountain Time'],
   [/beijing\s+time|china\s+time|shanghai\s+time|北京时间|中国时间|上海时间/i, 'Asia/Shanghai', 'China Standard Time'],
   [/singapore\s+time|\bSGT\b|新加坡时间/i, 'Asia/Singapore', 'Singapore Time'],
   [/hong\s+kong\s+time|\bHKT\b|香港时间/i, 'Asia/Hong_Kong', 'Hong Kong Time'],
@@ -26,6 +35,15 @@ export function parseDeterministicTime(payload) {
 
   if (!text) return { source: 'deterministic', candidates: [], message: 'No input.' };
   if (!isValidZone(targetTimeZone)) return null;
+  // Chrono can split this relation into unrelated dates instead of resolving it.
+  if (/\b(?:first|second|third|fourth|fifth|last)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(?:in|of)\b/i.test(text)) return null;
+
+  const sourceZones = detectSourceZones(text);
+  // A global zone cannot safely be assigned to every expression in mixed-zone text.
+  if (sourceZones.length > 1) return null;
+
+  const isoTimestamps = text.match(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})\b/g) || [];
+  if (isoTimestamps.length > 1 || (isoTimestamps.length && sourceZones.length)) return null;
 
   const isoResult = parseIsoOffsetTime(text, targetTimeZone, outputLocale);
   if (isoResult) return isoResult;
@@ -34,7 +52,7 @@ export function parseDeterministicTime(payload) {
   const parsed = chronoLocale.parse(text, now, { forwardDate: true }).slice(0, 5);
   if (!parsed.length) return null;
 
-  const sourceZone = detectSourceZone(text) ?? inferDateOnlyZone(parsed, targetTimeZone);
+  const sourceZone = sourceZones[0] ?? inferDateOnlyZone(parsed, targetTimeZone);
   if (!sourceZone) return null;
 
   const candidates = parsed
@@ -130,29 +148,39 @@ function toDateTime(component, zone) {
   return dateTime.isValid ? dateTime : null;
 }
 
-function detectSourceZone(text) {
-  const iana = text.match(/\b[A-Za-z]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?\b/)?.[0];
-  if (iana && isValidZone(iana)) {
-    return { zone: iana, label: iana, confidence: 0.98 };
-  }
+function detectSourceZones(text) {
+  const zones = new Map();
+  let remaining = text;
+  const addZone = (zone, label, confidence) => {
+    const existing = zones.get(zone);
+    zones.set(zone, {
+      zone,
+      label: existing ? `${existing.label} ${label}` : label,
+      confidence: existing ? Math.min(existing.confidence, confidence) : confidence
+    });
+  };
 
-  const fixedOffset = text.match(/\b(?:UTC|GMT)\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?\b/i);
-  if (fixedOffset) {
-    const sign = fixedOffset[1] === '-' ? -1 : 1;
-    const hours = Number(fixedOffset[2]);
-    const minutes = fixedOffset[3] ? Number(fixedOffset[3]) : 0;
-    const offset = sign * (hours * 60 + minutes);
-    return {
-      zone: FixedOffsetZone.instance(offset).name,
-      label: fixedOffset[0],
-      confidence: 0.95
-    };
-  }
+  remaining = remaining.replace(/\b[A-Za-z]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?\b/g, (iana) => {
+    if (!isValidZone(iana)) return iana;
+    addZone(iana, iana, 0.98);
+    return ' '.repeat(iana.length);
+  });
 
-  for (const [pattern, zone, label] of ZONE_ALIASES) {
-    if (pattern.test(text)) return { zone, label, confidence: 0.9 };
+  remaining = remaining.replace(/\b(?:UTC|GMT)\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?\b/gi,
+    (match, sign, hours, minutes) => {
+      const offset = (sign === '-' ? -1 : 1) * (Number(hours) * 60 + Number(minutes || 0));
+      addZone(FixedOffsetZone.instance(offset).name, match, 0.95);
+      // Mask explicit offsets so the UTC/GMT alias is not counted a second time.
+      return ' '.repeat(match.length);
+    });
+
+  for (const [pattern, zone] of ZONE_ALIASES) {
+    remaining = remaining.replace(new RegExp(pattern.source, 'gi'), (match) => {
+      addZone(zone, match, 0.9);
+      return ' '.repeat(match.length);
+    });
   }
-  return null;
+  return [...zones.values()];
 }
 
 function normalizeZone(zone) {
@@ -217,7 +245,7 @@ function buildNotices(item, sourceZone) {
     notices.push('Date was inferred from the provided reference time.');
   }
   if (/\bCST\b/i.test(sourceZone.label || '')) {
-    notices.push('CST is ambiguous; interpreted by the matched timezone rule.');
+    notices.push('CST is ambiguous; interpreted as Central Standard Time (UTC-06:00), not China Standard Time.');
   }
   return notices;
 }

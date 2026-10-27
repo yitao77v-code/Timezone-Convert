@@ -1,51 +1,40 @@
 # TimeShift Privacy Policy
 
-Effective date: July 2, 2026
+Effective date: October 27, 2026. Applies to TimeShift 0.1.1 and later.
 
-TimeShift is a Chrome extension that recognizes time expressions in text and converts them into the user's local timezone.
+TimeShift converts time expressions you enter into its panel to your device's local timezone.
 
-## Data TimeShift Processes
+## Your choices and the data processed
 
-TimeShift may process text that you enter into the extension panel or text you choose to convert from a webpage. This text may include dates, times, timezone names, timezone abbreviations, or surrounding words needed to understand the time expression.
+Typing alone does not send text to TimeShift's server. Conversion results require an internet connection and an explicit click on Convert. The extension does not automatically read webpage contents, browsing history, cookies, or other tabs.
 
-TimeShift may also use basic browser-provided settings, such as your local timezone and browser language, to format the conversion result.
+If you choose **Convert** in the online conversion section, the entire text currently entered in the panel, your target timezone, browser language, and the current timestamp are sent over HTTPS to https://timeshift-api.onrender.com. The disclosure beside that button explains this before you send anything. Each request requires a new click; editing the input does not automatically send it.
 
-## How Data Is Used
+The backend first attempts rule-based parsing. When it cannot confidently parse the input, it sends the same conversion context to OpenAI to produce a structured result. Input may contain personal or website content if you paste it into the panel. Enter only the text you want processed. You may choose not to send the text and close the panel instead.
 
-TimeShift uses this data only to provide time recognition and timezone conversion. For complex or ambiguous time expressions, the extension may send the entered text, target timezone, browser language, and current timestamp to TimeShift's HTTPS backend at:
+## Service providers and purposes
 
-https://timeshift-api.onrender.com
+- **Render** hosts the TimeShift backend and processes requests and ordinary connection information, such as IP addresses and request timing, to operate the service.
+- **OpenAI** processes fallback requests to recognize and convert time expressions. It receives the conversion context described above, rather than browser cookies or browsing history.
 
-The backend uses this information to return a structured timezone conversion result.
+TimeShift uses this information to provide time recognition and conversion, not advertising, profiling, sale of personal data, credit decisions, or unrelated purposes. Data is shared with these providers only as needed to operate this feature.
 
-## Data Sharing
+## Storage and retention
 
-TimeShift does not sell user data.
+The extension stores the panel's position in Chrome local storage. It does not save input text or conversion history to persistent extension storage. Closing the panel removes its input from the panel; removing the extension clears its extension storage.
 
-TimeShift does not use user data for advertising, credit decisions, profiling, or unrelated purposes.
+The TimeShift application code does not write request text or conversion results to a database, user profile, or application log. This does not mean service providers retain no data. Render and OpenAI may keep operational, security, and abuse-monitoring records under their policies and the account configuration. The backend requests store: false for OpenAI responses; that setting does not eliminate all provider retention. No zero-retention promise is made.
 
-TimeShift does not intentionally share user data with third parties except service providers required to operate the time recognition and conversion backend.
+See [Render's privacy policy](https://render.com/privacy) and [OpenAI API data controls](https://developers.openai.com/api/docs/guides/your-data) for provider practices. These services may process data outside your country.
 
-## Data Storage
+## Security and permissions
 
-The extension may store lightweight local preferences, such as the extension panel position, using Chrome extension storage.
+Online requests use HTTPS. API credentials stay on the backend and are not included in the published extension.
 
-TimeShift does not store your OpenAI API key in the browser extension and does not include any API key in the published extension package.
+activeTab and scripting open the floating panel in the page you choose when you click the extension icon. storage remembers the panel position. Access to the TimeShift API host is used for online conversion. The extension receives data responses and does not load remotely hosted executable code.
 
-The TimeShift backend is designed to process conversion requests and return results. It is not designed to create user accounts or maintain user profiles.
+## Contact and changes
 
-## Remote Code
+Contact the developer at yitao77v@gmail.com or through the [TimeShift support page](https://github.com/yitao77v-code/Timezone-Convert/issues) or the Chrome Web Store support contact. Do not include private text or credentials in a public issue. You can request information about data processing or deletion of data the developer controls through these channels.
 
-TimeShift does not load or execute remotely hosted JavaScript in the extension. The extension sends HTTPS requests to its backend and receives structured JSON responses.
-
-## Security
-
-Requests to the TimeShift backend are sent over HTTPS. No method of transmission or processing is completely secure, but TimeShift is designed to limit data collection to what is needed for timezone conversion.
-
-## Changes
-
-This privacy policy may be updated from time to time. Updates will be published in this file.
-
-## Contact
-
-For privacy questions, contact the developer through the Chrome Web Store listing or the project's GitHub repository.
+Updates to this policy will be published in this repository and included in future extension releases.

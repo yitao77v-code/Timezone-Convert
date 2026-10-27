@@ -1,89 +1,42 @@
 (function () {
-  const sectionClass = 'timeshift-ai-section';
-  const outputCardSelector = '.results-section .result-card';
   const targetTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  let timer = null;
-  let requestId = 0;
+  const REQUEST_TIMEOUT_MS = 60000;
+  let requestVersion = 0;
+  let pending = null;
+  let input;
+  let convertButton;
+  let cloudOutput;
 
-  function ensureSection() {
-    let section = document.querySelector(`.${sectionClass}`);
-    if (section) return section;
-
-    section = document.createElement('section');
-    section.className = sectionClass;
-    section.style.display = 'grid';
-    section.style.gap = '12px';
-    section.style.marginTop = '24px';
-
-    const results = document.querySelector('.results-section');
-    if (results && results.parentElement) {
-      results.parentElement.insertBefore(section, results);
-    } else {
-      document.body.appendChild(section);
-    }
-    return section;
-  }
-
-  function renderState(kind, text) {
-    if (kind === 'empty') {
-      const outputCard = document.querySelector(outputCardSelector);
-      if (outputCard) {
-        outputCard.dataset.smartState = '';
-        outputCard.classList.add('result-card-placeholder');
-        outputCard.innerHTML = `
-          <div class="result-primary">
-            <span class="section-label">Output</span>
-            <div class="result-time">&nbsp;</div>
-          </div>
-          <div class="result-meta">
-            <span class="meta-label">Target</span>
-            <span class="meta-value">${escapeHtml(targetTimeZone)}</span>
-          </div>
-        `;
-      }
-      const sourceValue = document.querySelector('.meta-section .meta-value');
-      if (sourceValue) sourceValue.textContent = '—';
-      const section = document.querySelector(`.${sectionClass}`);
-      if (section) section.replaceChildren();
-      return;
-    }
-
-    const className = kind === 'error' ? 'error-message' : 'loading-indicator';
-    const outputCard = document.querySelector(outputCardSelector);
-    if (outputCard) {
-      outputCard.classList.remove('result-card-placeholder');
-      outputCard.dataset.smartState = kind;
-      outputCard.innerHTML = `
+  function renderEmptyOutput() {
+    cloudOutput.hidden = false;
+    cloudOutput.innerHTML = `
+      <article class="result-card timeshift-empty-result">
         <div class="result-primary">
           <span class="section-label">Output</span>
-          <div class="${className}">${escapeHtml(text)}</div>
+          <div class="timeshift-empty-message">Enter a time and choose Convert.</div>
         </div>
         <div class="result-meta">
           <span class="meta-label">Target</span>
           <span class="meta-value">${escapeHtml(targetTimeZone)}</span>
         </div>
-      `;
-      return;
-    }
+      </article>
+    `;
+  }
 
-    const section = ensureSection();
-    section.innerHTML = `<div class="${className}">${escapeHtml(text)}</div>`;
+  function renderState(kind, text) {
+    cloudOutput.hidden = false;
+    cloudOutput.innerHTML = `<div class="${kind === 'error' ? 'error-message' : 'loading-indicator'}">${escapeHtml(text)}</div>`;
   }
 
   function renderResult(result) {
-    const candidates = Array.isArray(result.candidates) ? result.candidates : [];
+    const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
     if (!candidates.length) {
-      renderState('error', result.message || 'AI did not find a time expression.');
+      renderState('error', result?.message || 'No time expression found. Add a date and source timezone, then try again.');
       return;
     }
-
-    updateSourceDisplay(candidates[0]);
-
-    const outputCard = document.querySelector(outputCardSelector);
-    if (outputCard) {
-      outputCard.classList.remove('result-card-placeholder');
-      outputCard.dataset.smartState = 'result';
-      outputCard.innerHTML = candidates.map((candidate, index) => `
+    cloudOutput.hidden = false;
+    cloudOutput.innerHTML = candidates.map((candidate, index) => `
+      <article class="result-card">
         ${candidates.length > 1 ? `<div class="option-marker">${String.fromCharCode(65 + index)}</div>` : ''}
         <div class="result-primary">
           <span class="section-label">Output</span>
@@ -91,33 +44,15 @@
         </div>
         <div class="result-meta">
           <span class="meta-label">Source</span>
-          <span class="meta-value">${escapeHtml(candidate.sourceDisplay || candidate.sourceText || 'Unknown')}</span>
+          <span class="meta-value">${escapeHtml(candidate.sourceDisplay || candidate.sourceText || 'Unknown')} · ${escapeHtml(candidate.sourceTimeZone || 'Unknown timezone')}</span>
         </div>
         <div class="result-meta">
           <span class="meta-label">Target</span>
           <span class="meta-value">${escapeHtml(candidate.targetTimeZone || targetTimeZone)}</span>
         </div>
         ${criticalNotices(candidate, result).map((notice) => `<div class="warning">${escapeHtml(notice)}</div>`).join('')}
-      `).join('');
-      return;
-    }
-
-    const section = ensureSection();
-    section.innerHTML = candidates.map((candidate) => `
-      <article class="result-card">
-        <div class="result-primary">
-          <span class="section-label">Output</span>
-          <div class="result-time">${escapeHtml(candidate.targetDisplay || '')}</div>
-        </div>
       </article>
     `).join('');
-  }
-
-  function updateSourceDisplay(candidate) {
-    const sourceValue = document.querySelector('.meta-section .meta-value');
-    if (sourceValue && candidate?.sourceTimeZone) {
-      sourceValue.textContent = candidate.sourceTimeZone;
-    }
   }
 
   function criticalNotices(candidate, result) {
@@ -141,40 +76,90 @@
     return /missing|ambiguous|uncertain|low confidence|confirm|failed|error|invalid|cannot|unable|timezone.*missing|source timezone|multiple possible/i.test(notice);
   }
 
-  function parseWithAI(text) {
-    const currentId = ++requestId;
-    renderState('loading', 'Recognizing time expression...');
-
-    requestParse({
-      text,
-      targetTimeZone,
-      locale: navigator.language,
-      now: new Date().toISOString()
-    }).then((response) => {
-      if (currentId !== requestId) return;
-      if (!response || !response.ok) {
-        renderState('error', response?.error || 'OpenAI recognition failed.');
-        return;
-      }
-      renderResult(response.result);
-    }).catch((error) => {
-      if (currentId !== requestId) return;
-      renderState('error', error.message);
-    });
+  function syncButton() {
+    convertButton.disabled = Boolean(pending) || !input.value.trim();
+    convertButton.textContent = pending ? 'Converting…' : 'Convert';
+    convertButton.setAttribute('aria-busy', String(Boolean(pending)));
   }
 
-  function requestParse(payload) {
+  function invalidateRequest() {
+    requestVersion += 1;
+    if (pending) {
+      const previous = pending;
+      pending = null;
+      clearTimeout(previous.timeout);
+      previous.controller.abort('input-changed');
+    }
+    renderEmptyOutput();
+    syncButton();
+  }
+
+  async function convert() {
+    const text = input.value.trim();
+    if (!text || pending) return;
+    const version = ++requestVersion;
+    const controller = new AbortController();
+    const request = {
+      id: `${Date.now()}-${version}`,
+      controller,
+      timeout: setTimeout(() => controller.abort('timeout'), REQUEST_TIMEOUT_MS)
+    };
+    pending = request;
+    renderEmptyOutput();
+    syncButton();
+    renderState('loading', 'Converting time expression…');
+
+    try {
+      const response = await requestParse({
+        text,
+        targetTimeZone,
+        locale: navigator.language,
+        now: new Date().toISOString()
+      }, request.id, controller.signal);
+      if (version !== requestVersion || input.value.trim() !== text) return;
+      if (!response?.ok) throw new Error(response?.error || 'Conversion failed. Please try again.');
+      renderResult(response.result);
+    } catch (error) {
+      if (version !== requestVersion || input.value.trim() !== text) return;
+      const message = controller.signal.aborted && controller.signal.reason === 'timeout'
+        ? 'The service took too long. Please try Convert again.'
+        : error.message;
+      renderState('error', message);
+    } finally {
+      clearTimeout(request.timeout);
+      if (pending === request) {
+        pending = null;
+        syncButton();
+      }
+    }
+  }
+
+  function requestParse(payload, requestId, signal) {
     if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-      return new Promise((resolve) => {
-        chrome.runtime.sendMessage({
-          action: 'parseTimeWithAI',
-          payload
-        }, (response) => {
-          if (chrome.runtime.lastError) {
-            resolve({ ok: false, error: chrome.runtime.lastError.message });
-            return;
-          }
-          resolve(response);
+      return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (value, error) => {
+          if (settled) return;
+          settled = true;
+          signal.removeEventListener('abort', cancel);
+          if (error) reject(error);
+          else resolve(value);
+        };
+        const cancel = () => {
+          chrome.runtime.sendMessage({ action: 'cancelTimeParse', requestId }, () => {
+            // Reading lastError prevents an unchecked error if the worker has stopped.
+            void chrome.runtime.lastError;
+          });
+          finish(null, new Error('Conversion cancelled.'));
+        };
+        signal.addEventListener('abort', cancel, { once: true });
+        if (signal.aborted) {
+          cancel();
+          return;
+        }
+        chrome.runtime.sendMessage({ action: 'parseTimeWithAI', requestId, payload }, (response) => {
+          const error = chrome.runtime.lastError;
+          finish(response, error ? new Error(error.message) : null);
         });
       });
     }
@@ -182,7 +167,8 @@
     return fetch('https://timeshift-api.onrender.com/parse-time', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal
     }).then(async (response) => {
       const body = await response.json().catch(() => ({}));
       if (!response.ok) return { ok: false, error: body.error || `TimeShift API returned ${response.status}` };
@@ -191,22 +177,49 @@
   }
 
   function bind() {
-    const input = document.getElementById('time-input');
-    if (!input) {
+    input = document.getElementById('time-input');
+    const grid = document.querySelector('.grid-container');
+    const results = document.querySelector('.results-section');
+    if (!input || !grid || !results) {
       requestAnimationFrame(bind);
       return;
     }
 
-    input.addEventListener('input', () => {
-      clearTimeout(timer);
-      const text = input.value.trim();
-      if (!text) {
-        requestId += 1;
-        renderState('empty');
-        return;
-      }
-      timer = setTimeout(() => parseWithAI(text), 650);
-    });
+    // Keep these nodes separate from React-owned result cards.
+    const controls = document.createElement('section');
+    controls.className = 'timeshift-convert-section';
+    const disclosure = document.createElement('p');
+    disclosure.id = 'timeshift-data-disclosure';
+    disclosure.className = 'timeshift-data-disclosure';
+    disclosure.textContent = 'Convert sends the full input, target timezone, browser language and current time to TimeShift’s backend on Render. Ambiguous text may be processed by OpenAI. Text is only sent when you choose Convert.';
+
+    const actions = document.createElement('div');
+    actions.className = 'timeshift-convert-actions';
+    convertButton = document.createElement('button');
+    convertButton.type = 'button';
+    convertButton.className = 'timeshift-convert-button';
+    convertButton.setAttribute('aria-describedby', disclosure.id);
+    convertButton.addEventListener('click', convert);
+    const privacyLink = document.createElement('a');
+    privacyLink.textContent = 'Privacy';
+    privacyLink.href = typeof chrome !== 'undefined' && chrome.runtime?.getURL
+      ? chrome.runtime.getURL('privacy.html') : './privacy.html';
+    privacyLink.target = '_blank';
+    privacyLink.rel = 'noopener noreferrer';
+    actions.append(convertButton, privacyLink);
+    controls.append(disclosure, actions);
+    grid.insertBefore(controls, results);
+
+    cloudOutput = document.createElement('section');
+    cloudOutput.className = 'timeshift-ai-section';
+    cloudOutput.setAttribute('aria-live', 'polite');
+    cloudOutput.setAttribute('aria-label', 'Conversion result');
+    cloudOutput.hidden = true;
+    grid.insertBefore(cloudOutput, results);
+    input.addEventListener('input', invalidateRequest);
+    window.addEventListener('pagehide', invalidateRequest);
+    renderEmptyOutput();
+    syncButton();
   }
 
   window.addEventListener('pointerdown', (event) => {

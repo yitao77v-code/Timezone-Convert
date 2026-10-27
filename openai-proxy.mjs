@@ -5,7 +5,7 @@ import { parseDeterministicTime } from './timeParser.mjs';
 
 const PORT = Number(process.env.PORT || process.env.TIMESHIFT_PROXY_PORT || 8787);
 const ENV_PATH = resolve(process.cwd(), '.env.local');
-const MODEL = process.env.OPENAI_MODEL || 'gpt-4.1-nano';
+
 
 async function loadEnv() {
   try {
@@ -123,6 +123,8 @@ async function parseTime(payload) {
     },
     body: JSON.stringify({
       model: MODEL,
+      store: false,
+      ...(MODEL === 'gpt-5.6-luna' ? { reasoning: { effort: 'none' } } : {}),
       input: [
         {
           role: 'developer',
@@ -188,6 +190,10 @@ function detectOutputStyle(text) {
 }
 
 await loadEnv();
+const configuredModel = process.env.OPENAI_MODEL || 'gpt-5.6-luna';
+const MODEL = /^gpt-4\.1-nano(?:-2025-04-14)?$/.test(configuredModel)
+  ? 'gpt-5.6-luna'
+  : configuredModel;
 
 const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {

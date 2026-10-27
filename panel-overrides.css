@@ -15,58 +15,104 @@ body {
   height: 100%;
   max-width: none;
   padding: 28px 28px 20px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
 }
 
 .grid-container {
-  height: 100%;
-  gap: 18px;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  height: auto;
+  min-height: 100%;
+  align-content: start;
+  gap: 14px;
+  grid-template-rows: none;
 }
 
 .time-input {
-  min-height: 104px;
+  min-height: 84px;
   max-height: 126px;
-  resize: none;
+  resize: vertical;
 }
 
 .meta-section {
-  padding: 14px;
+  padding: 12px 14px;
 }
 
-.results-section {
+.results-section,
+.timeshift-ai-section {
   min-height: 0;
-  gap: 14px;
-  overflow: hidden;
+  display: grid;
+  gap: 12px;
+  overflow: visible;
 }
 
 .result-card {
   min-height: 0;
-  padding: 18px;
-  gap: 14px;
+  padding: 16px;
+  gap: 12px;
+  overflow-wrap: anywhere;
 }
 
 .result-card-placeholder {
-  height: 100%;
+  min-height: 110px;
 }
 
-.timeshift-ai-section {
-  display: none;
-  min-height: 0;
-  overflow: hidden;
+.timeshift-convert-section {
+  display: grid;
+  gap: 10px;
 }
 
-.result-card[data-smart-state="loading"],
-.result-card[data-smart-state="error"] {
-  min-height: 120px;
+.timeshift-data-disclosure {
+  margin: 0;
+  color: #737373;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
-.result-card[data-smart-state="result"] {
-  overflow: hidden;
+.timeshift-convert-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
-body:has(.result-card[data-smart-state="loading"]) .results-section > .error-message,
-body:has(.result-card[data-smart-state="error"]) .results-section > .error-message,
-body:has(.result-card[data-smart-state="result"]) .results-section > .error-message {
-  display: none;
+.timeshift-convert-button {
+  padding: 8px 18px;
+  border: 1px solid #171717;
+  border-radius: 0;
+  background: #171717;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.timeshift-convert-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.timeshift-convert-button:focus-visible,
+.timeshift-convert-actions a:focus-visible {
+  outline: 2px solid #171717;
+  outline-offset: 3px;
+}
+
+.timeshift-convert-actions a {
+  color: #525252;
+  font-size: 11px;
+  text-underline-offset: 3px;
+}
+
+/* The legacy bundle still parses locally; only the reviewed backend result is shown. */
+.results-section,
+.meta-section,
+.timeshift-ai-section[hidden] {
+  display: none !important;
+}
+
+.timeshift-empty-message {
+  color: #737373;
+  font-size: 13px;
+  line-height: 1.5;
 }
