@@ -15,8 +15,9 @@ test('parses and converts English timezone expressions without OpenAI', () => {
   assert.equal(result.candidates.length, 1);
   assert.equal(result.candidates[0].sourceTimeZone, 'America/Los_Angeles');
   assert.equal(result.candidates[0].targetTimeZone, 'Asia/Shanghai');
-  assert.match(result.candidates[0].sourceDisplay, /Jul 2, 2026, 3:00 PM/);
-  assert.match(result.candidates[0].targetDisplay, /Jul 3, 2026, 6:00 AM/);
+  // At this instant Los Angeles is still on June 30.
+  assert.match(result.candidates[0].sourceDisplay, /Jul 1, 2026, 3:00 PM/);
+  assert.match(result.candidates[0].targetDisplay, /Jul 2, 2026, 6:00 AM/);
 });
 
 test('parses and converts Chinese timezone expressions without OpenAI', () => {
