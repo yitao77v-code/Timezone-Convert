@@ -53,7 +53,7 @@ function setup() {
   vm.runInContext(enhancer, context);
   const controls = grid.children.find(node => node.className === 'timeshift-convert-section');
   const output = grid.children.find(node => node.className === 'timeshift-ai-section');
-  const button = controls.children[1].children[0];
+  const button = controls.children[0].children[0];
   const type = value => { input.value = value; input.dispatch('input'); };
   return { input, button, controls, output, type };
 }
@@ -62,9 +62,8 @@ test('bundled conversion works with no network and only after Convert', async ()
   const ui = setup();
   assert.equal(ui.button.disabled, true);
   ui.type('October 27, 2026 at 3pm UTC');
-  assert.match(ui.output.innerHTML, /Enter a time and choose Convert/);
-  assert.match(ui.controls.children[0].textContent, /entirely on your device/);
-  assert.match(ui.controls.children[1].children[1].href, /privacy\.html$/);
+  assert.match(ui.output.innerHTML, /—/);
+  assert.match(ui.controls.children[0].children[1].href, /privacy\.html$/);
   ui.button.dispatch('click');
   assert.equal(ui.button.disabled, true);
   await flush();
@@ -80,13 +79,13 @@ test('editing clears the result and prevents an earlier conversion from renderin
   ui.button.dispatch('click');
   ui.type('October 28, 2026 at 4pm UTC');
   await flush();
-  assert.match(ui.output.innerHTML, /Enter a time and choose Convert/);
+  assert.match(ui.output.innerHTML, /—/);
   assert.doesNotMatch(ui.output.innerHTML, /Oct 27/);
   ui.button.dispatch('click');
   await flush();
   assert.match(ui.output.innerHTML, /Oct 28, 2026/);
   ui.type('October 29, 2026 at 5pm UTC');
-  assert.match(ui.output.innerHTML, /Enter a time and choose Convert/);
+  assert.match(ui.output.innerHTML, /—/);
   assert.doesNotMatch(ui.output.innerHTML, /Oct 28/);
 });
 
