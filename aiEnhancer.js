@@ -12,7 +12,7 @@
       <article class="result-card timeshift-empty-result">
         <div class="result-primary">
           <span class="section-label">Output</span>
-          <div class="timeshift-empty-message">Enter a time and choose Convert.</div>
+          <div class="timeshift-empty-message">—</div>
         </div>
         <div class="result-meta">
           <span class="meta-label">Target</span>
@@ -138,17 +138,11 @@
     // Keep these nodes separate from React-owned result cards.
     const controls = document.createElement('section');
     controls.className = 'timeshift-convert-section';
-    const disclosure = document.createElement('p');
-    disclosure.id = 'timeshift-data-disclosure';
-    disclosure.className = 'timeshift-data-disclosure';
-    disclosure.textContent = 'Converted entirely on your device. Your text stays here — no AI, account or internet connection required. Include the source timezone for a reliable result.';
-
     const actions = document.createElement('div');
     actions.className = 'timeshift-convert-actions';
     convertButton = document.createElement('button');
     convertButton.type = 'button';
     convertButton.className = 'timeshift-convert-button';
-    convertButton.setAttribute('aria-describedby', disclosure.id);
     convertButton.addEventListener('click', convert);
     const privacyLink = document.createElement('a');
     privacyLink.textContent = 'Privacy';
@@ -157,7 +151,7 @@
     privacyLink.target = '_blank';
     privacyLink.rel = 'noopener noreferrer';
     actions.append(convertButton, privacyLink);
-    controls.append(disclosure, actions);
+    controls.append(actions);
     grid.insertBefore(controls, results);
 
     cloudOutput = document.createElement('section');
